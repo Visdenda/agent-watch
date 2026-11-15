@@ -1,0 +1,62 @@
+{
+  "name": "@visdenda/agent-watch",
+  "version": "0.5.0",
+  "private": false,
+  "license": "MIT",
+  "description": "Framework-agnostic, zero-dependency crawler probe and Markdown negotiation for AI-agent-readable sites.",
+  "keywords": [
+    "aeo",
+    "geo",
+    "ai-crawlers",
+    "crawler-probe",
+    "framework-agnostic",
+    "llms-txt",
+    "markdown-for-agents",
+    "agent-readiness",
+    "seo"
+  ],
+  "homepage": "https://visdenda.com/docs/npm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liuliuliu-git/agent-watch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liuliuliu-git/agent-watch/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./hono": "./src/hono.ts",
+    "./workers": "./src/workers.ts",
+    "./next": "./src/next.ts",
+    "./markdown": "./src/markdown/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "check:package": "node publish.mjs --check",
+    "prepack": "node build.mjs",
+    "publish:npm": "node publish.mjs",
+    "prepublishOnly": "node -e \"console.error('[agent-watch] 不要就地 publish：用 pnpm --filter @visdenda/agent-watch publish:npm（exports 需改写成 dist）'); process.exit(1)\""
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "esbuild": "^0.28.2",
+    "publint": "^0.3.25",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
