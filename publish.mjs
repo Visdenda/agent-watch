@@ -124,11 +124,24 @@ if (missing.length > 0) {
 const run = (command, commandArgs, options = {}) =>
   execFileSync(command, commandArgs, { cwd: root, stdio: "inherit", ...options });
 
+/**
+ * 从本地 node_modules/.bin 取 bin：私有仓（pnpm）与公开镜像仓（npm）都会为直接
+ * devDependency 创建 shim，不依赖 pnpm 命令本身。以前写死 `pnpm exec publint`
+ * 会让镜像仓 CI 直接 ENOENT（0.5.0 首次公开镜像的失败原因）。
+ */
+const binOf = (binName) => {
+  const candidate = join(root, "node_modules", ".bin", binName);
+  if (!existsSync(candidate)) {
+    throw new Error(`missing ${binName} in node_modules/.bin — run npm install first`);
+  }
+  return candidate;
+};
+
 console.log("[agent-watch] gate: publint");
-run("pnpm", ["exec", "publint", stage]);
+run(binOf("publint"), [stage]);
 
 console.log("[agent-watch] gate: arethetypeswrong (node10 / node16 / bundler)");
-run("pnpm", ["exec", "attw", stage, "--pack", "--profile", "strict"]);
+run(binOf("attw"), [stage, "--pack", "--profile", "strict"]);
 
 console.log("[agent-watch] gate: install smoke (ESM + CJS + TS node16)");
 const work = mkdtempSync(join(tmpdir(), "agent-watch-consumer-"));
