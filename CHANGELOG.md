@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-11-15
+
+### Packaging
+
+- Publish gates resolve `publint` and `attw` from `node_modules/.bin` instead of `pnpm exec`, so the
+  public source mirror runs the same gates without a pnpm installation. No runtime change.
+
 ## 0.5.0 — 2026-11-12
 
 ### Changed (breaking; pre-1.0)
