@@ -267,6 +267,20 @@ const pathOf = (request: Request): string => {
   }
 };
 
+/**
+ * 采集端自己的写入路径。探针与采集器同源时（自托管、或把 `/v1/probe` 反代回同一个
+ * 应用），`send()` 的 POST 会再进一次被包裹的 handler，而它不是浏览器导航——不跳过
+ * 就会自我递归上报，直到把子请求打满。默认跳过这三点；自定义挂载点在包裹层自行排除。
+ */
+const OWN_INGEST_PATHS = new Set(["/v1/probe", "/v1/probe/batch", "/v1/probe/check"]);
+
+/** 跳过判断只看 pathname：query/hash 与尾斜杠都不该让同一端点漏过去。 */
+const isOwnIngestPath = (raw: string | null | undefined): boolean => {
+  const pathname = (raw ?? "/").split("?")[0]?.split("#")[0] ?? "/";
+  const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return OWN_INGEST_PATHS.has(normalized);
+};
+
 const hostOf = (url: string | null | undefined): string | null => {
   if (!url) return null;
   try {
@@ -570,6 +584,8 @@ export const createAgentWatch = (config: AgentWatchConfig): AgentWatch => {
   const probe = (input: ProbeInput): void => {
     const ua = (input.ua ?? "").trim().slice(0, MAX_UA_LENGTH);
     if (!ua) return;
+    // 同源自托管的自循环：自己的上报请求不能再被上报（见 OWN_INGEST_PATHS）。
+    if (isOwnIngestPath(input.path)) return;
 
     const rawRef = (readHeader(input.headers, "referer") ?? "").trim();
     const ref = rawRef.length > 0 ? rawRef.slice(0, MAX_REF_LENGTH) : undefined;

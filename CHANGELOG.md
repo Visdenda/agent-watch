@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 — 2026-11-15
+
+### Fixed
+
+- A probe that shares an origin with the collector no longer reports itself. `send()` posts to
+  `/v1/probe*`, and because that POST is not a browser navigation the wrapped handler used to see
+  it, report it again, and recurse until the subrequest limit. Those three ingest paths are now
+  skipped before any payload is built. Self-hosting the collector inside the same app (Visdenda's
+  own Worker included) now needs no path exclusion in user code; a collector mounted elsewhere
+  still has to be excluded by the caller.
+
 ## 0.5.1 — 2026-11-15
 
 ### Packaging

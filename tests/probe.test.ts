@@ -221,4 +221,25 @@ describe("agent-watch probe", () => {
     });
     expect(bodyOf(calls[0])).not.toHaveProperty("status");
   });
+
+  it("never reports its own ingest endpoints (same-origin self-host)", () => {
+    const calls: Call[] = [];
+    const watch = createAgentWatch({ token: "vdc_test", fetch: fakeFetch(calls) });
+
+    // 同源自托管：send() 自己的 POST 会再进一次被包裹的 handler，不跳过就无限递归。
+    for (const path of [
+      "/v1/probe",
+      "/v1/probe/",
+      "/v1/probe?retry=1",
+      "/v1/probe/batch",
+      "/v1/probe/check",
+    ]) {
+      watch.probe({ ua: "GPTBot", path });
+    }
+    expect(calls).toHaveLength(0);
+
+    // 只跳过这三个精确端点：同前缀的普通路径照常上报。
+    watch.probe({ ua: "GPTBot", path: "/v1/probes" });
+    expect(calls).toHaveLength(1);
+  });
 });

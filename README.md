@@ -326,6 +326,11 @@ not a crawler answer.
   runtime noise. Every other failure is silent by default (`onError` / `debug` make it visible).
 - `endpoint` defaults to `https://visdenda.com`; `sendIp` and `skipBrowserNavigations` default to
   `true`; `timeoutMs` defaults to 2000; `trustProxy` defaults to `false`; batching is off.
+- `/v1/probe`, `/v1/probe/batch` and `/v1/probe/check` are never reported. If the collector shares
+  an origin with your app (self-hosting it, or proxying those paths back to the same server), the
+  probe's own POST would otherwise re-enter the wrapped handler, be reported again, and recurse
+  until the subrequest limit. A collector mounted at a different path still needs excluding in the
+  caller.
 - Document navigations (`sec-fetch-mode: navigate` **and** `sec-fetch-dest: document` **and** an
   HTML `accept`) are skipped unless the referrer is a known AI host. This works on Firefox and
   Safari too: requiring `sec-ch-ua` would only skip Chromium and let other browsers' page views
