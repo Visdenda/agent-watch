@@ -11,8 +11,8 @@ import { build } from "esbuild";
  * - dist/index.cjs + dist/markdown/index.cjs（CJS）
  * - dist/**\/*.d.ts（tsc declaration emit）
  *
- * 仓内消费仍走 package.json 的 exports（源码）；发布时 pnpm 用
- * publishConfig.exports 覆盖为 dist（见 package.json）。
+ * 仓内消费仍走 package.json 的 exports（源码）；发布时由 publish.mjs 在暂存目录里
+ * 把清单重写成 dist（`publishConfig.exports` 不被 npm 认，0.2.0 就是因此发坏的）。
  */
 const require = createRequire(import.meta.url);
 const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));

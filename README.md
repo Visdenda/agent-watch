@@ -8,6 +8,10 @@ Zero-dependency helpers that make a site readable by AI agents:
 
 ```bash
 npm install @visdenda/agent-watch
+# pnpm add @visdenda/agent-watch
+# yarn add @visdenda/agent-watch
+# bun add @visdenda/agent-watch
+# deno add npm:@visdenda/agent-watch
 ```
 
 ### Entry points
