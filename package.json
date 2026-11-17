@@ -18,10 +18,10 @@
   "homepage": "https://visdenda.com/docs/npm",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/liuliuliu-git/agent-watch.git"
+    "url": "git+https://github.com/visdenda/agent-watch.git"
   },
   "bugs": {
-    "url": "https://github.com/liuliuliu-git/agent-watch/issues"
+    "url": "https://github.com/visdenda/agent-watch/issues"
   },
   "files": [
     "dist",
