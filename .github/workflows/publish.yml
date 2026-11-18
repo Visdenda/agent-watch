@@ -1,7 +1,7 @@
 name: Publish
 
 # npm Trusted Publishing（OIDC）：一次性前置是在 npm 网页给本包配置
-# Trusted Publisher（owner visdenda、repo agent-watch、workflow publish.yml）。
+# Trusted Publisher（owner Visdenda、repo agent-watch、workflow publish.yml）。
 #
 # --provenance 只在公开仓可用；发布脚本用 AGENT_WATCH_PROVENANCE=true 打开。
 "on":

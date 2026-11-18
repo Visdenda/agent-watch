@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 — 2026-11-18
+
+### Packaging
+
+- `repository` and `bugs` now use the organization's canonical spelling (`Visdenda/agent-watch`).
+  npm compares `repository.url` against the GitHub OIDC claim when a release is published with
+  provenance, and the lowercase owner failed that check with `E422`. No runtime change.
+
 ## 0.5.2 — 2026-11-15
 
 ### Fixed

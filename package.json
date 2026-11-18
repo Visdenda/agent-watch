@@ -1,6 +1,6 @@
 {
   "name": "@visdenda/agent-watch",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": false,
   "license": "MIT",
   "description": "Framework-agnostic, zero-dependency crawler probe and Markdown negotiation for AI-agent-readable sites.",
@@ -18,10 +18,10 @@
   "homepage": "https://visdenda.com/docs/npm",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/visdenda/agent-watch.git"
+    "url": "git+https://github.com/Visdenda/agent-watch.git"
   },
   "bugs": {
-    "url": "https://github.com/visdenda/agent-watch/issues"
+    "url": "https://github.com/Visdenda/agent-watch/issues"
   },
   "files": [
     "dist",
