@@ -42,12 +42,14 @@ not a secret: it is visible in your source. The probe endpoint cannot check Orig
 callers do not send one), so the real limit is the daily cap — 2,000 probe events and 500 distinct
 paths on the free plan, 20,000 and 5,000 on paid. Caps are visible: the dashboard states when a
 window is a lower bound and how many path hits went to the overflow bucket. Forged reports can
-only pollute your own dashboard. Rotate the token to stop them.
+only pollute your own dashboard. Revoke the token to stop them immediately; rotating a token
+keeps the previous one valid for 30 days so prerendered pages and already-deployed snippets keep
+reporting while you redeploy.
 
 A domain in the payload would not work: anyone could post hits for any site, and there would be
 no way to revoke a sender. A per-site token is the smallest thing that answers _which site these
 hits belong to_, is write-only, and can be rotated. The page beacon and the probe share one token,
-so one rotation covers both channels.
+so one rotation (or revoke) covers both channels.
 
 ### How crawler identity is verified
 
@@ -77,7 +79,7 @@ The agents the collector recognizes are published separately as
 SDK stays zero-dependency, the list can change without an SDK release, and the dataset is citable
 on its own. The probe does not need it installed — matching runs server-side.
 
-### Three request shapes, not one adapter per framework
+### Four request shapes, not one adapter per framework
 
 Every backend in the JS ecosystem hands you one of three things: a fetch handler, a Node
 `(req, res, next)` pair, or its own middleware hook. One helper covers each, so there is no
@@ -88,18 +90,27 @@ non-JS backends use the HTTP contract directly.
 
 | You get                                        | Where                                                                             | Import path | Helper                                  |
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | ----------- | --------------------------------------- |
-| A fetch handler (`request` in, `Response` out) | Cloudflare Workers, Bun, Deno, Vercel/Netlify functions                           | `/workers`  | `wrapFetch`                             |
+| A fetch handler (`request` in, `Response` out) | Cloudflare Workers, Bun, Deno, Vercel/Netlify functions, Next route handlers      | `/workers`  | `wrapFetch`                             |
 | A Node request/response pair                   | Express, Koa, Polka, NestJS (default platform), Fastify via `req.raw`/`reply.raw` | `/node`     | `nodeMiddleware`                        |
 | A context + `next()` middleware                | Hono                                                                              | `/hono`     | `contextMiddleware`                     |
-| A request-only hook                            | Next.js, Astro, SvelteKit, Nuxt                                                   | `/next`     | `requestMiddleware`, or a 6-line recipe |
+| A request-only hook                            | Next.js middleware, Nuxt/Nitro, TanStack Start                                    | `/next`     | `requestMiddleware`, or a 6-line recipe |
 
-A framework hook is a recipe rather than a package: Astro's `defineMiddleware` and SvelteKit's
-`handle` both await a `Response`, so the status comes for free; Nuxt's `defineEventHandler` does
-not, so it reports without one (same class as Next middleware). A recipe stays shorter than the
-adapter would be — which is the whole test for whether one gets written.
+A framework hook is a recipe rather than a package: Astro's `defineMiddleware`, SvelteKit's
+`handle`, SolidStart's `createMiddleware`, React Router 7's `middleware` and Fresh's `ctx.next()`
+resolve a `Response`, so the status comes for free. Qwik City's `onRequest` returns nothing but
+exposes `status()`, and Elysia's `onAfterResponse` exposes `set.status`. Nuxt's
+`defineEventHandler` and TanStack Start's request middleware only see the request, so they report
+without a status (same class as Next middleware). A recipe stays shorter than the adapter would be
+— which is the whole test for whether one gets written.
 
 Anything else — Go, Rust, PHP, Python, Ruby, Java, a home-grown HTTP layer — speaks the protocol
 directly; see **Any other stack** below.
+
+UI-only libraries are not a request shape: Preact, Alpine.js and htmx run in the browser, so the
+probe goes on the server that renders their HTML — Fresh for Preact SSR, Express/Rails/Django/PHP
+for an htmx or Alpine page. Svelte 5 components are the same story; SvelteKit supplies the hook. A
+fully static site has no server hook at all: the page beacon still records human traffic, and
+crawler hits need an edge worker or logpush.
 
 ### Probe v2 options
 
@@ -192,7 +203,7 @@ fastify.addHook("onRequest", (request, reply, done) => {
 });
 ```
 
-#### Framework hooks (Astro, SvelteKit, Nuxt)
+#### Framework hooks (Astro, SvelteKit, SolidStart, React Router, Qwik, Fresh, Elysia)
 
 Astro and SvelteKit run your code in their own hook, and both hand you a `Response`, so the real
 status is yours:
@@ -237,6 +248,13 @@ export const handle = async ({ event, resolve }) => {
 Nuxt is the exception: `defineEventHandler` in `server/middleware/` sees the request but not the
 response, so report without `status` — same class as Next middleware below. SolidStart's
 `createMiddleware` takes H3 middleware and does await a `Response`, so it behaves like Astro.
+
+The same pattern covers the rest of the hook ecosystem, with the status read from whatever the hook
+exposes: React Router 7's `middleware` in the root route (`next()` returns a `Response`, 7.9+
+behind `future.v8_middleware`), Fresh's `ctx.next()` (also a `Response`), Qwik City's
+`src/routes/plugin.ts` (`status()` after `next()`), and Elysia's `onAfterResponse` (`set.status`).
+The full recipes, including TanStack Start and every framework named here, live in the
+[installation guide](https://visdenda.com/docs/npm#npm-hook).
 
 #### Next.js middleware
 
