@@ -110,7 +110,36 @@ UI-only libraries are not a request shape: Preact, Alpine.js and htmx run in the
 probe goes on the server that renders their HTML — Fresh for Preact SSR, Express/Rails/Django/PHP
 for an htmx or Alpine page. Svelte 5 components are the same story; SvelteKit supplies the hook. A
 fully static site has no server hook at all: the page beacon still records human traffic, and
-crawler hits need an edge worker or logpush.
+crawler hits need an edge observer (a pass-through Worker on every route).
+
+### Edge observer for cached and edge-served hits
+
+A pass-through Worker runs before the zone cache, so it sees a request even when the cache or the
+asset server answers it and the origin never does:
+
+```ts
+import { wrapFetch } from "@visdenda/agent-watch/workers";
+
+export default {
+  fetch: wrapFetch({ token: "vdc_your_token" }, (request) => fetch(request)),
+};
+```
+
+That snippet is for a site whose app runs on an origin. If your app already runs on Workers, wrap
+its existing handler with `wrapFetch` instead of adding a second Worker: on the same zone a Worker
+route cannot be the target of `fetch()`, so a separate observer would reach the DNS origin rather
+than your app Worker (a front Worker can reach an app Worker published on a Custom Domain).
+
+- If static assets are served before the Worker, set `assets.run_worker_first` (or list the paths)
+  so the observer sees them. Workers Caching answers bypass the wrapper entirely.
+- Run one lane per site — the origin probe or the edge observer, not both. The console has no
+  cross-lane dedupe, so running both doubles hits.
+- Cloudflare WAF and rate-limiting rules terminate a request before any Worker runs. Those
+  requests never reach the observer and are not counted; a blocked row only means your app
+  returned 401/403/429/451. To see blocked agents, make the decision inside the Worker after the
+  observer and return 403 yourself; Cloudflare-level blocks stay invisible.
+- A pass-through Worker adds a same-zone subrequest, which rate-limiting rules may count
+  separately; exclude it with `cf.worker.upstream_zone` or wrap the existing Worker.
 
 ### Probe v2 options
 
@@ -336,11 +365,9 @@ prefer a queued job over `register_shutdown_function`.
 Never describe a script-only install as "you can see AI crawlers". The honest answer is a
 server-side probe; the console shows `na` with a pointer to this page until one is installed.
 
-A CDN that answers from cache never reaches origin middleware. Two ways out: run the probe at the
-edge, where it runs before the cache (a Cloudflare Worker route, Vercel/Netlify edge middleware),
-or ship CDN/access logs to the ingestion API once it ships. Nothing on the origin can see a
-cache hit, so "installed the Node middleware and still see nothing" is usually a caching answer,
-not a crawler answer.
+A CDN that answers from cache never reaches origin middleware. The edge observer above runs before
+the cache, so it sees those requests; nothing on the origin can see a cache hit, so "installed the
+Node middleware and still see nothing" is usually a caching answer, not a crawler answer.
 
 ## Probe rules
 

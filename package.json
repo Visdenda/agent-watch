@@ -1,6 +1,6 @@
 {
   "name": "@visdenda/agent-watch",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": false,
   "license": "MIT",
   "description": "Framework-agnostic, zero-dependency crawler probe and Markdown negotiation for AI-agent-readable sites.",

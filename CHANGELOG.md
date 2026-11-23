@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.4 — 2026-11-23
+
+### Added
+
+- Web Bot Auth capture: when a request arrives signed (RFC 9421 `Signature-Agent`,
+  `Signature-Input` and `Signature`), the probe now reports those three headers and the request
+  host, so the collector can verify the request against the vendor's published key directory
+  instead of trusting a user agent. This is additive to protocol v2: the new payload fields are
+  optional, probes that predate them keep working unchanged, and unsigned requests produce the
+  same payload as before.
+
 ## 0.5.3 — 2026-11-18
 
 ### Packaging
