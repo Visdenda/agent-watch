@@ -42,9 +42,10 @@ export type AgentWatchConfig = {
   timeoutMs?: number;
   /**
    * 仅当站点确实在反向代理之后时开启：允许把 `x-forwarded-for` 首段、
-   * `x-real-ip` / `true-client-ip` / `fly-client-ip` 当作客户端 IP。
-   * 缺省 false（只认 `cf-connecting-ip`），否则任意客户端都能用请求头伪造
-   * IP、污染 ASN 聚合。Vercel / Netlify / nginx 前置属于「确实在代理之后」。
+   * `x-real-ip` / `true-client-ip` / `fly-client-ip` 当作客户端 IP，
+   * 并把 `x-forwarded-host` 当作公开 Host（Web Bot Auth 的 `@authority`）。
+   * 缺省 false（只认 `cf-connecting-ip` 与原始 Host），否则任意客户端都能用请求头
+   * 伪造 IP/Host、污染 ASN 聚合与验签。Vercel / Netlify / nginx 前置属于「确实在代理之后」。
    */
   trustProxy?: boolean;
   /** 静态回退国家码（无平台国家头的运行时）；`ProbeInput.country` 优先。 */
@@ -67,11 +68,25 @@ export type AgentWatchConfig = {
   fetch?: typeof fetch;
 };
 
+/**
+ * 入站 Web Bot Auth 头（RFC 9421）。与服务端 `webBotAuthHeadersSchema` 同口径，
+ * 但 SDK 零依赖、不引私有包，所以类型在本地定义。
+ */
+export type WebBotAuthHeaders = {
+  signatureAgent: string;
+  signatureInput: string;
+  signature: string;
+};
+
 export type ProbeInput = {
   ua?: string | null;
   path?: string | null;
   status?: number;
   ip?: string | null;
+  /** 显式覆盖请求 Host（authority）；`null` 表示不带，缺省从 `host` 头或 URL 取。 */
+  host?: string | null;
+  /** 显式覆盖 Web Bot Auth 头；`null` 表示不带，缺省从请求头取。 */
+  webBotAuth?: WebBotAuthHeaders | null;
   /** 完整请求 URL（用于取 `utm_source`）；缺省只从 headers 取 referer。 */
   url?: string | null;
   headers?: HeadersInit;
@@ -100,6 +115,13 @@ export type ProbePayload = {
   dur?: number;
   country?: string;
   colo?: string;
+  /**
+   * 请求 Host（authority）。只在请求带 Web Bot Auth 签名头时上报：缺省未签名是常态，
+   * 字段体积不该摊到每个事件上。`@authority` 验签用的就是原始 Host。
+   */
+  host?: string;
+  /** 入站 Web Bot Auth 头；三头齐全且未超限才上报（缺省=未签名，不等于伪造）。 */
+  webBotAuth?: WebBotAuthHeaders;
 };
 
 /** 批量缓冲条目：事件在入队时序列化一次，flush 时按字节切包并直接拼请求体。 */
@@ -163,6 +185,11 @@ const MAX_IP_LENGTH = 45;
 const MAX_REF_LENGTH = 1_024;
 const MAX_UTM_LENGTH = 64;
 const MAX_DURATION_MS = 600_000;
+/** 与服务端 schema 对齐（`host.max(253)` / `webBotAuthHeadersSchema`）：超限整条 400。 */
+const MAX_HOST_LENGTH = 253;
+const MAX_SIGNATURE_AGENT_LENGTH = 1_024;
+const MAX_SIGNATURE_INPUT_LENGTH = 4_096;
+const MAX_SIGNATURE_LENGTH = 4_096;
 /** 服务端批量上限（probe-v2 A.2）：>50 条整批 400。 */
 export const MAX_BATCH_EVENTS = 50;
 /** 服务端批量体积上限：32 KB；客户端按此拆批，避免整批 413。 */
@@ -257,6 +284,67 @@ const sanitizeIp = (raw: string | null | undefined): string | undefined => {
   const value = (raw ?? "").trim();
   if (!value || value.length > MAX_IP_LENGTH || /\s/.test(value)) return undefined;
   return value;
+};
+
+/**
+ * Host 大小写不敏感，但 Web Bot Auth 的 `@authority` 用原始值验签：
+ * 只去空白，不归一大小写（URL 回退路径本身会被 `URL` 解析成小写）。
+ */
+const sanitizeHost = (raw: string | null | undefined): string | undefined => {
+  const value = (raw ?? "").trim();
+  if (!value || value.length > MAX_HOST_LENGTH || /\s/.test(value)) return undefined;
+  return value;
+};
+
+/** 三个签名头齐全、非空且都在服务端上限内才可上报；半套头验不了签，报也无用。 */
+const sanitizeWebBotAuth = (
+  candidate: WebBotAuthHeaders | null | undefined,
+): WebBotAuthHeaders | undefined => {
+  if (!candidate) return undefined;
+  const signatureAgent = candidate.signatureAgent.trim();
+  const signatureInput = candidate.signatureInput.trim();
+  const signature = candidate.signature.trim();
+  if (!signatureAgent || signatureAgent.length > MAX_SIGNATURE_AGENT_LENGTH) return undefined;
+  if (!signatureInput || signatureInput.length > MAX_SIGNATURE_INPUT_LENGTH) return undefined;
+  if (!signature || signature.length > MAX_SIGNATURE_LENGTH) return undefined;
+  return { signatureAgent, signatureInput, signature };
+};
+
+/**
+ * 读取入站 Web Bot Auth 头（RFC 9421；header 名大小写不敏感）。
+ * `Signature-Agent` 不存在 = 未签名（不是伪造），直接 undefined；
+ * 但只带一部分头时同样丢弃——三缺一服务端无法验签，不值得让载荷更大。
+ */
+export const webBotAuthOf = (headers: HeadersInit | undefined): WebBotAuthHeaders | undefined => {
+  const signatureAgent = readHeader(headers, "signature-agent");
+  if (signatureAgent === null) return undefined;
+  return sanitizeWebBotAuth({
+    signatureAgent,
+    signatureInput: readHeader(headers, "signature-input") ?? "",
+    signature: readHeader(headers, "signature") ?? "",
+  });
+};
+
+/** 原始 `host` 头优先（验签要原文）；缺失或非法时回退到请求 URL 的 authority。 */
+export const authorityOf = (
+  headers: HeadersInit | undefined,
+  url: string | null | undefined,
+  trustProxy = false,
+): string | undefined => {
+  // 反向代理之后 `host` 常是内部上游主机，公开 Host 只在 `x-forwarded-host`。
+  // 与 IP 同一信任口径：只有站点声明自己在代理后面时才信这个头。
+  if (trustProxy) {
+    const forwarded = sanitizeHost(readHeader(headers, "x-forwarded-host")?.split(",")[0]);
+    if (forwarded !== undefined) return forwarded;
+  }
+  const fromHeader = sanitizeHost(readHeader(headers, "host"));
+  if (fromHeader !== undefined) return fromHeader;
+  if (!url) return undefined;
+  try {
+    return sanitizeHost(new URL(url).host);
+  } catch {
+    return undefined;
+  }
 };
 
 const pathOf = (request: Request): string => {
@@ -629,6 +717,20 @@ export const createAgentWatch = (config: AgentWatchConfig): AgentWatch => {
     if (country !== undefined) payload.country = country;
     const colo = coloOf(input.headers, input, config.colo);
     if (colo !== undefined) payload.colo = colo;
+    // 未签名是绝大多数请求：只有真带 `Signature-Agent` 才附 host + 三个签名头。
+    // 显式传 `webBotAuth`（含 null）优先于请求头，便于适配器按运行时能力覆盖。
+    const webBotAuth =
+      input.webBotAuth === undefined
+        ? webBotAuthOf(input.headers)
+        : sanitizeWebBotAuth(input.webBotAuth);
+    if (webBotAuth !== undefined) {
+      payload.webBotAuth = webBotAuth;
+      const host =
+        input.host === undefined
+          ? authorityOf(input.headers, input.url, trustProxy)
+          : sanitizeHost(input.host);
+      if (host !== undefined) payload.host = host;
+    }
 
     enqueue(payload, input.waitUntil);
   };

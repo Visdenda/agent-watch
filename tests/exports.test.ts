@@ -17,9 +17,11 @@ const MAIN_EXPORTS = [
   "AI_REFERRER_HOSTS",
   "MAX_BATCH_BODY_BYTES",
   "MAX_BATCH_EVENTS",
+  "authorityOf",
   "createAgentWatch",
   "isAiReferrerHost",
   "normalizeUtmSource",
+  "webBotAuthOf",
 ];
 
 const MARKDOWN_EXPORTS = [
